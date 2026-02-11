@@ -3,6 +3,7 @@
 Official implementation of **FLoRIST** , a federated fine-tuning framework that performs **low-rank aggregation in latent space** using **Singular Value Thresholding (SVT)** to achieve the best trade-off between accuracy and communication efficiency for large language models.
 
 📄 Paper: *Accepted to MLSys 2026*
+
 Code release accompanies the final camera-ready version.
 
 ---
