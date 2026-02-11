@@ -1,62 +1,31 @@
 # FLoRIST: Singular Value Thresholding for Efficient and Accurate Federated Fine-Tuning of Large Language Models
 
-Official implementation of **FLoRIST** , a federated fine-tuning framework that performs **low-rank aggregation in latent space** using **Singular Value Thresholding (SVT)** to achieve the best trade-off between accuracy and communication efficiency for large language models.
+Official implementation of **FLoRIST**, a federated fine-tuning framework that performs low-rank aggregation in latent space using **Singular Value Thresholding (SVT)** to achieve a strong balance between accuracy, communication efficiency, and scalability for large language models.
 
-📄 Paper: *Accepted to MLSys 2026*
-
-Code release accompanies the final camera-ready version.
+📄 *Accepted to MLSys 2026*  
+This repository accompanies the camera-ready version of the paper.
 
 ---
 
 ## Overview
 
-Federated fine-tuning of LLMs is challenging because:
+Federated fine-tuning of LLMs faces a fundamental tension: large models require expressive updates, but communication constraints and client heterogeneity limit what can be transmitted. Existing LoRA-based methods either introduce aggregation noise, rely on expensive full-matrix decompositions, or scale poorly when client ranks differ.
 
-* Clients are heterogeneous
-* Communication is expensive
-* Naive LoRA aggregation introduces noise
-* Full SVD approaches are computationally infeasible
-* Stacking adapters explodes communication
+FLoRIST resolves this by operating directly in the low-rank latent adapter space instead of constructing dense global updates. The server performs an efficient decomposition of stacked client adapters and applies singular value thresholding to retain only the most informative components. The result is a compact global adapter that preserves performance while dramatically reducing communication.
 
-FLoRIST resolves all three axes:
-
-> **accuracy × efficiency × scalability**
-
-Instead of constructing the dense global update matrix, FLoRIST:
-
-✔ Aggregates directly in the low-rank latent adapter space
-✔ Performs efficient SVD without forming ΔW
-✔ Applies singular value thresholding to remove redundancy
-✔ Supports heterogeneous client ranks natively
-✔ Broadcasts a unified compact global adapter
-
-This yields:
-
-* Higher MMLU accuracy
-* 5×–350× communication savings
-* 7× lower server compute vs FlexLoRA
-* Stable performance under heterogeneity
+In practice, this design yields higher MMLU accuracy, large communication savings (often 5×–350×), lower server computation compared to full SVD baselines, and stable behavior under heterogeneous client ranks.
 
 ---
 
-## Key Contributions
+## Key Ideas
 
-* **Noise-free aggregation** without cross-term artifacts (unlike FedIT)
-* **Efficient SVD pipeline** that avoids full matrix construction
-* **Energy-based rank selection** via singular value thresholding
-* **Adaptive per-layer rank compression**
-* **Best accuracy–efficiency trade-off** across all baselines
+FLoRIST introduces a unified framework for federated LoRA aggregation built around three principles:
 
-FLoRIST consistently outperforms:
+- **Noise-free aggregation** that avoids the cross-term artifacts present in FedIT-style averaging
+- **Efficient SVD without forming the dense update matrix**, making server computation scalable
+- **Energy-based rank selection** via singular value thresholding to remove redundant components
 
-> FedIT · FFA-LoRA · FLoRA · FlexLoRA
-
-across:
-
-* TinyLlama
-* Llama-3.2-1B
-* Dolly / Alpaca / Wizard
-* Homogeneous + heterogeneous settings
+This leads to adaptive per-layer compression and a global adapter that captures the shared signal across clients while filtering noisy updates. Across TinyLlama and Llama-3.2-1B models, and across Dolly, Alpaca, and Wizard datasets, FLoRIST consistently matches or exceeds the accuracy of FedIT, FFA-LoRA, FLoRA, and FlexLoRA while offering substantially higher communication efficiency.
 
 ---
 
@@ -66,32 +35,23 @@ across:
 
 ---
 
-## Experimental Setup (Paper Configuration)
+## Experimental Setup
 
-All reported results follow the MLSys paper protocol:
+All results follow the protocol used in the MLSys paper. Training uses 100 total clients with 10 sampled per communication round for 75 rounds under non-IID partitions. LoRA is applied to attention layers only, and performance is evaluated on a 1,444-sample subset of MMLU.
 
-* 100 total clients
-* 10 clients sampled per round
-* 75 communication rounds
-* non-IID client data partitions
-* LoRA applied to attention layers only
-* Evaluation on 1,444-sample MMLU subset
+Two client configurations are studied:
 
-### Homogeneous setting
+**Homogeneous setting.**  
+All clients use LoRA rank 16.
 
-All clients rank = 16
+**Heterogeneous setting.**  
+Client ranks follow a heavy-tail distribution reflecting realistic device imbalance:
 
-### Heterogeneous setting
-
-Heavy-tail rank distribution:
-
-* 40 clients → rank 4
-* 20 clients → rank 8
-* 20 clients → rank 16
-* 10 clients → rank 32
-* 10 clients → rank 64
-
-This reflects realistic client capacity imbalance.
+- 40 clients use rank 4  
+- 20 clients use rank 8  
+- 20 clients use rank 16  
+- 10 clients use rank 32  
+- 10 clients use rank 64  
 
 ---
 
@@ -99,34 +59,15 @@ This reflects realistic client capacity imbalance.
 
 ```bash
 pip install -r requirements.txt
-```
+````
 
-Tested on:
-
-* PyTorch 2.x
-* CUDA 12
-* NVIDIA H100 / A100 GPUs
+Tested with PyTorch 2.x, CUDA 12, and NVIDIA H100/A100 GPUs.
 
 ---
 
 ## Datasets
 
-### Wizard
-
-[https://huggingface.co/datasets/WizardLM/WizardLM_evol_instruct_70k](https://huggingface.co/datasets/WizardLM/WizardLM_evol_instruct_70k)
-→ `./data_wiz/`
-
-### Alpaca
-
-[https://huggingface.co/datasets/tatsu-lab/alpaca](https://huggingface.co/datasets/tatsu-lab/alpaca)
-→ `./data_alpaca/`
-
-### Dolly
-
-[https://huggingface.co/datasets/databricks/databricks-dolly-15k](https://huggingface.co/datasets/databricks/databricks-dolly-15k)
-→ `./data/`
-
-Each sample must contain:
+We follow the data format used in prior federated LoRA work. Each sample contains:
 
 ```
 instruction
@@ -134,11 +75,22 @@ input (optional)
 output
 ```
 
+Datasets are downloaded and placed in:
+
+Wizard → `./data_wiz/`
+[https://huggingface.co/datasets/WizardLM/WizardLM_evol_instruct_70k](https://huggingface.co/datasets/WizardLM/WizardLM_evol_instruct_70k)
+
+Alpaca → `./data_alpaca/`
+[https://huggingface.co/datasets/tatsu-lab/alpaca](https://huggingface.co/datasets/tatsu-lab/alpaca)
+
+Dolly → `./data/`
+[https://huggingface.co/datasets/databricks/databricks-dolly-15k](https://huggingface.co/datasets/databricks/databricks-dolly-15k)
+
 ---
 
 ## Training
 
-### Homogeneous Training
+### Homogeneous configuration
 
 ```bash
 python main.py \
@@ -152,9 +104,7 @@ python main.py \
   --threshold 0.90
 ```
 
----
-
-### Heterogeneous Training
+### Heterogeneous configuration
 
 ```bash
 python main.py \
@@ -169,7 +119,7 @@ python main.py \
   --heter True
 ```
 
-For FedIT / FFA:
+For FedIT or FFA-LoRA baselines, add:
 
 ```
 --zero_padding True
@@ -177,12 +127,12 @@ For FedIT / FFA:
 
 ---
 
-## Methods
+## Available Methods
 
-Available aggregation strategies:
+The framework supports multiple aggregation strategies:
 
 ```
-florist   ← proposed method
+florist   (proposed method)
 flora
 fedit
 flex
@@ -193,67 +143,43 @@ ffa
 
 ## Threshold Selection
 
-τ ∈ [0.80, 0.99]
+The SVT threshold τ ∈ [0.80, 0.99] controls the retained rank of the global adapter. Lower thresholds produce stronger compression and higher communication efficiency, while higher thresholds prioritize maximal accuracy.
 
-Lower τ:
-
-✔ smaller global rank
-✔ higher communication efficiency
-✔ stronger compression
-
-Higher τ:
-
-✔ maximal accuracy
-✔ less compression
-
-We select τ via binary search to match or exceed baseline accuracy.
-
-SVT acts as a **regularizer** — filtering noisy client updates.
+In experiments, τ is selected via binary search to match or exceed baseline performance. Thresholding acts as an implicit regularizer that filters noisy client-specific components and preserves shared structure.
 
 ---
 
 ## Evaluation
 
-Every run automatically evaluates:
+Each run automatically reports:
 
 * MMLU accuracy
 * convergence curves
 * communication efficiency
 * adapter rank statistics
 
-Communication efficiency is defined as:
-
-> 1 / total parameters transmitted
-
-Lower rank → higher efficiency.
+Communication efficiency is defined as the inverse of total transmitted parameters. Lower effective rank corresponds to higher efficiency.
 
 ---
 
 ## Results Summary
 
-Across all experiments:
+Across all evaluated settings, FLoRIST achieves the strongest overall accuracy–efficiency trade-off. It frequently matches or exceeds the best baseline accuracy while delivering the highest communication efficiency and significantly lower server compute than full-matrix SVD methods.
 
-FLoRIST achieves:
+Representative findings include:
 
-* Best or second-best accuracy
-* Highest communication efficiency
-* Stable heterogeneous performance
-* Lowest server compute among accurate methods
-
-Key findings:
-
-* Up to **349× less communication vs full fine-tuning**
-* Up to **108× more efficient than FLoRA**
-* ~7× lower server FLOPs vs FlexLoRA
-* Adaptive rank compression per layer
-* Intermediate layers require higher rank
-* q_proj > v_proj intrinsic dimensionality
+* up to **349× less communication** than full fine-tuning
+* up to **108× higher efficiency** than FLoRA
+* ~7× lower server FLOPs than FlexLoRA
+* adaptive rank compression that varies across layers
+* higher intrinsic dimensionality in intermediate layers
+* consistent redundancy in value projections vs query projections
 
 ---
 
-## Communication Cost
+## Communication Cost Example
 
-Example (TinyLlama, Wizard):
+TinyLlama on Wizard (homogeneous):
 
 | Method      | Download (MB) |
 | ----------- | ------------- |
@@ -273,13 +199,5 @@ Apache 2.0
 
 ## Contributing
 
-We welcome:
-
-* reproducibility scripts
-* dataset loaders
-* experiment tracking
-* benchmark extensions
-
-Open an issue before major changes.
-
+We welcome reproducibility improvements, dataset integrations, and benchmarking extensions. Please open an issue before large architectural changes.
 
