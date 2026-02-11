@@ -151,14 +151,14 @@ In experiments, τ is selected via binary search to match or exceed baseline per
 
 ## Evaluation
 
-Each run automatically reports:
+Each training run logs the following statistics:
 
-* MMLU accuracy
-* convergence curves
-* communication efficiency
-* adapter rank statistics
+- MMLU accuracy
+- per-round training metrics
+- total LoRA rank
+- total transmitted parameters
 
-Communication efficiency is defined as the inverse of total transmitted parameters. Lower effective rank corresponds to higher efficiency.
+Communication efficiency is defined as the inverse of total rank. Lower effective rank corresponds to higher efficiency.
 
 ---
 
