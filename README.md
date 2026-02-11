@@ -1,6 +1,6 @@
 # FLoRIST: Singular Value Thresholding for Efficient and Accurate Federated Fine-Tuning of Large Language Models
 
-Official implementation of **FLoRIST** — a federated fine-tuning framework that performs **low-rank aggregation in latent space** using **Singular Value Thresholding (SVT)** to achieve the best trade-off between accuracy and communication efficiency for large language models.
+Official implementation of **FLoRIST** , a federated fine-tuning framework that performs **low-rank aggregation in latent space** using **Singular Value Thresholding (SVT)** to achieve the best trade-off between accuracy and communication efficiency for large language models.
 
 📄 Paper: *Accepted to MLSys 2026*
 Code release accompanies the final camera-ready version.
@@ -13,7 +13,7 @@ Federated fine-tuning of LLMs is challenging because:
 
 * Clients are heterogeneous
 * Communication is expensive
-* Naïve LoRA aggregation introduces noise
+* Naive LoRA aggregation introduces noise
 * Full SVD approaches are computationally infeasible
 * Stacking adapters explodes communication
 
@@ -23,11 +23,11 @@ FLoRIST resolves all three axes:
 
 Instead of constructing the dense global update matrix, FLoRIST:
 
-✅ Aggregates directly in the low-rank latent adapter space
-✅ Performs efficient SVD without forming ΔW
-✅ Applies singular value thresholding to remove redundancy
-✅ Supports heterogeneous client ranks natively
-✅ Broadcasts a unified compact global adapter
+✔ Aggregates directly in the low-rank latent adapter space
+✔ Performs efficient SVD without forming ΔW
+✔ Applies singular value thresholding to remove redundancy
+✔ Supports heterogeneous client ranks natively
+✔ Broadcasts a unified compact global adapter
 
 This yields:
 
@@ -109,8 +109,6 @@ Tested on:
 ---
 
 ## Datasets
-
-We follow the FLoRA format exactly.
 
 ### Wizard
 
