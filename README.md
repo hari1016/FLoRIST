@@ -1,166 +1,286 @@
 # FLoRIST: Singular Value Thresholding for Efficient and Accurate Federated Fine-Tuning of Large Language Models
 
-This repository contains the official implementation of **FLoRIST**, a framework for communication-efficient and performance-preserving federated fine-tuning of large language models (LLMs) using low-rank adapters and singular value thresholding. FLoRIST has been submitted to NeurIPS 2025.
+Official implementation of **FLoRIST** — a federated fine-tuning framework that performs **low-rank aggregation in latent space** using **Singular Value Thresholding (SVT)** to achieve the best trade-off between accuracy and communication efficiency for large language models.
 
-In federated learning settings, where training data remains decentralized across clients (e.g., institutions or devices), fine-tuning large models becomes challenging due to communication and computational constraints. Parameter-efficient fine-tuning (PEFT) methods such as LoRA allow clients to train compact low-rank adapters locally, but aggregating these adapters efficiently and effectively remains an open problem—especially under heterogeneous client configurations.
+📄 Paper: *Accepted to MLSys 2026*
+Code release accompanies the final camera-ready version.
 
-FLoRIST addresses this by:
-- **Aggregating directly in the low-rank latent space**, avoiding the construction of full dense update matrices.
-- **Applying singular value thresholding** to retain only the most informative components, enabling compact and performant global adapters.
-- **Supporting heterogeneous local ranks** across clients without requiring full-rank communication or complex coordination.
-- **Introducing two variants**: `FLoRIST-O` for optimal performance, and `FLoRIST-E` for maximum communication efficiency.
+---
 
-FLoRIST outperforms state-of-the-art baselines such as FedIT, FLoRA, FlexLoRA, and FFA-LoRA across multiple datasets (Dolly, Alpaca, WizardLM) and model scales (TinyLlama, Llama-3.2-1B, Llama-7B), achieving  **lower communication** while matching or exceeding their accuracy.
+## Overview
+
+Federated fine-tuning of LLMs is challenging because:
+
+* Clients are heterogeneous
+* Communication is expensive
+* Naïve LoRA aggregation introduces noise
+* Full SVD approaches are computationally infeasible
+* Stacking adapters explodes communication
+
+FLoRIST resolves all three axes:
+
+> **accuracy × efficiency × scalability**
+
+Instead of constructing the dense global update matrix, FLoRIST:
+
+✅ Aggregates directly in the low-rank latent adapter space
+✅ Performs efficient SVD without forming ΔW
+✅ Applies singular value thresholding to remove redundancy
+✅ Supports heterogeneous client ranks natively
+✅ Broadcasts a unified compact global adapter
+
+This yields:
+
+* Higher MMLU accuracy
+* 5×–350× communication savings
+* 7× lower server compute vs FlexLoRA
+* Stable performance under heterogeneity
+
+---
+
+## Key Contributions
+
+* **Noise-free aggregation** without cross-term artifacts (unlike FedIT)
+* **Efficient SVD pipeline** that avoids full matrix construction
+* **Energy-based rank selection** via singular value thresholding
+* **Adaptive per-layer rank compression**
+* **Best accuracy–efficiency trade-off** across all baselines
+
+FLoRIST consistently outperforms:
+
+> FedIT · FFA-LoRA · FLoRA · FlexLoRA
+
+across:
+
+* TinyLlama
+* Llama-3.2-1B
+* Dolly / Alpaca / Wizard
+* Homogeneous + heterogeneous settings
+
+---
 
 <p align="center">
   <img src="./figures/workflow-8.png" width="75%" alt="FLoRIST Workflow">
 </p>
 
-## Requirements
+---
 
-To install the necessary dependencies, run:
+## Experimental Setup (Paper Configuration)
+
+All reported results follow the MLSys paper protocol:
+
+* 100 total clients
+* 10 clients sampled per round
+* 75 communication rounds
+* non-IID client data partitions
+* LoRA applied to attention layers only
+* Evaluation on 1,444-sample MMLU subset
+
+### Homogeneous setting
+
+All clients rank = 16
+
+### Heterogeneous setting
+
+Heavy-tail rank distribution:
+
+* 40 clients → rank 4
+* 20 clients → rank 8
+* 20 clients → rank 16
+* 10 clients → rank 32
+* 10 clients → rank 64
+
+This reflects realistic client capacity imbalance.
+
+---
+
+## Requirements
 
 ```bash
 pip install -r requirements.txt
 ```
 
+Tested on:
+
+* PyTorch 2.x
+* CUDA 12
+* NVIDIA H100 / A100 GPUs
+
+---
+
 ## Datasets
 
-We follow the same data format and directory structure as used in the original [FLoRA repository](https://github.com/ATP-1010/FederatedLLM). All datasets are stored in JSON format and should be placed in the appropriate folders.
+We follow the FLoRA format exactly.
 
-### Available Datasets
+### Wizard
 
-- **Wizard**  
-  - Source: [WizardLM/WizardLM_evol_instruct_70k](https://huggingface.co/datasets/WizardLM/WizardLM_evol_instruct_70k)  
-  - Path:  Downloaded and pre-split in `./data_wiz/`  
+[https://huggingface.co/datasets/WizardLM/WizardLM_evol_instruct_70k](https://huggingface.co/datasets/WizardLM/WizardLM_evol_instruct_70k)
+→ `./data_wiz/`
 
-- **Alpaca**  
-  - Source: [tatsu-lab/alpaca](https://huggingface.co/datasets/tatsu-lab/alpaca)  
-  - Path:  Downloaded and pre-split in `./data_alpaca/`  
+### Alpaca
 
-- **Dolly**  
-  - Source: [databricks/databricks-dolly-15k](https://huggingface.co/datasets/databricks/databricks-dolly-15k)  
-  - Path:  Downloaded and pre-split in `./data/`  
+[https://huggingface.co/datasets/tatsu-lab/alpaca](https://huggingface.co/datasets/tatsu-lab/alpaca)
+→ `./data_alpaca/`
 
-If you want to use a custom dataset, make sure it follows the same instruction-response JSON format as these folders. Each sample should contain fields such as `"instruction"`, `"input"` (optional), and `"output"`.
+### Dolly
 
+[https://huggingface.co/datasets/databricks/databricks-dolly-15k](https://huggingface.co/datasets/databricks/databricks-dolly-15k)
+→ `./data/`
+
+Each sample must contain:
+
+```
+instruction
+input (optional)
+output
+```
+
+---
 
 ## Training
 
-To train a model in a **homogeneous** federated setting:
+### Homogeneous Training
 
-**FLoRIST**
 ```bash
-python3 main.py --global_model 'tinyllama' \
-  --data_path "./data" \
-  --output_dir './tinyllama-dolly-homo-1-3-8/' \
-  --num_communication_rounds 1 \
+python main.py \
+  --global_model tinyllama \
+  --data_path ./data \
+  --num_clients 100 \
+  --clients_per_round 10 \
+  --num_communication_rounds 75 \
   --local_num_epochs 3 \
   --method florist \
-  --num_clients 8 \
-  --threshold 0.9
+  --threshold 0.90
 ```
 
-**FLoRA**
-```bash
-python3 main.py --global_model 'tinyllama' \
-  --data_path "./data" \
-  --output_dir './tinyllama-dolly-homo-1-3-8/' \
-  --num_communication_rounds 1 \
-  --local_num_epochs 3 \
-  --method flora \
-  --num_clients 8
-```
+---
 
-**FedIT**
-```bash
-python3 main.py --global_model 'tinyllama' \
-  --data_path "./data" \
-  --output_dir './tinyllama-dolly-homo-1-3-8/' \
-  --num_communication_rounds 1 \
-  --local_num_epochs 3 \
-  --method fedit \
-  --num_clients 8
-```
-
-**FlexLoRA**
-```bash
-python3 main.py --global_model 'tinyllama' \
-  --data_path "./data" \
-  --output_dir './tinyllama-dolly-homo-1-3-8/' \
-  --num_communication_rounds 1 \
-  --local_num_epochs 3 \
-  --method flex \
-  --num_clients 8
-```
-
-**FFA-LoRA**
-```bash
-python3 main.py --global_model 'tinyllama' \
-  --data_path "./data" \
-  --output_dir './tinyllama-dolly-homo-1-3-8/' \
-  --num_communication_rounds 1 \
-  --local_num_epochs 3 \
-  --method ffa \
-  --num_clients 8
-```
-
-To train in a **heterogeneous** client rank setup, add `--heter True`. For methods that do not support heterogeneity (e.g., FedIT and FFA-LoRA), add `--zero_padding True`.
-
-Example:
+### Heterogeneous Training
 
 ```bash
-python3 main.py --global_model 'huggyllama/llama-7b' \
-  --data_path "./data_wiz" \
-  --output_dir './llama7b-wiz-heter-1-1-8/' \
-  --num_communication_rounds 1 \
+python main.py \
+  --global_model tinyllama \
+  --data_path ./data_wiz \
+  --num_clients 100 \
+  --clients_per_round 10 \
+  --num_communication_rounds 75 \
   --local_num_epochs 3 \
   --method florist \
-  --num_clients 8 \
-  --threshold 0.80 \
+  --threshold 0.85 \
   --heter True
 ```
 
+For FedIT / FFA:
+
+```
+--zero_padding True
+```
+
+---
+
+## Methods
+
+Available aggregation strategies:
+
+```
+florist   ← proposed method
+flora
+fedit
+flex
+ffa
+```
+
+---
+
+## Threshold Selection
+
+τ ∈ [0.80, 0.99]
+
+Lower τ:
+
+✔ smaller global rank
+✔ higher communication efficiency
+✔ stronger compression
+
+Higher τ:
+
+✔ maximal accuracy
+✔ less compression
+
+We select τ via binary search to match or exceed baseline accuracy.
+
+SVT acts as a **regularizer** — filtering noisy client updates.
+
+---
+
 ## Evaluation
 
-All training runs automatically evaluate the final global model on the [MMLU benchmark](https://huggingface.co/datasets/mmlu) and report accuracy at the end.
+Every run automatically evaluates:
 
+* MMLU accuracy
+* convergence curves
+* communication efficiency
+* adapter rank statistics
 
-## Results
+Communication efficiency is defined as:
 
-FLoRIST achieves state-of-the-art trade-offs between accuracy and communication efficiency across all model sizes, datasets, and client types.
+> 1 / total parameters transmitted
 
-### Results on Homogeneous Setting (MMLU Benchmark)
+Lower rank → higher efficiency.
 
-| Model           | Method         | Dolly Acc (%) | Dolly Eff. (×10⁻⁴) | Alpaca Acc (%) | Alpaca Eff. (×10⁻⁴) | Wizard Acc (%) | Wizard Eff. (×10⁻⁴) |
-|-----------------|----------------|----------------|--------------------|----------------|---------------------|----------------|----------------------|
-| **TinyLlama**   | FedIT          | 28.88          | 14.20              | **31.99**      | 14.20               | 41.42          | 14.20                |
-|                 | FLoRA          | 27.48          | 1.78               | 29.09          | 1.78                | 41.99          | 1.78                 |
-|                 | FlexLoRA       | 28.03          | 14.20              | 29.00          | 14.20               | _42.53_        | 14.20                |
-|                 | FFA-LoRA       | 24.74          | 28.40              | 25.57          | 28.40               | 26.31          | 28.40                |
-|                 | FLoRIST-O      | **30.42** (τ=0.87) | 45.40          | _29.81_ (τ=0.93) | 34.36               | **43.63** (τ=0.99) | 16.92           |
-|                 | FLoRIST-E      | _29.25_ (τ=0.80) | **76.30**       | 29.43 (τ=0.84) | **63.30**           | 42.39 (τ=0.82) | **73.50**            |
-| **Llama-7b**     | FedIT          | _34.75_        | 9.77               | 27.38          | 9.77                | 28.50          | 9.77                 |
-|                 | FLoRA          | 34.38          | 1.22               | 26.34          | 1.22                | 28.50          | 1.22                 |
-|                 | FlexLoRA       | 33.88          | 9.77               | 26.27          | 9.77                | 28.69          | 9.77                 |
-|                 | FFA-LoRA       | 31.52          | 19.50              | 22.69          | 19.50               | 28.34          | 19.50                |
-|                 | FLoRIST-O      | **35.58** (τ=0.95) | 21.40          | **29.05** (τ=0.85) | 57.47          | **29.25** (τ=0.95) | 29.41           |
-|                 | FLoRIST-E      | 34.45 (τ=0.85) | **51.02**          | _28.30_ (τ=0.80) | **70.90**        | _29.14_ (τ=0.87) | **52.90**            |
-| **Llama-3.2-1B** | FedIT          | 19.07          | 19.50              | 25.99          | 19.50               | 27.27          | 19.50                |
-|                 | FLoRA          | 18.97          | 2.44               | **30.34**      | 2.44                | 27.48          | 2.44                 |
-|                 | FlexLoRA       | 19.45          | 19.50              | 30.16          | 19.50               | 27.01          | 19.50                |
-|                 | FFA-LoRA       | 19.59          | 39.06              | 18.68          | 39.06               | _28.01_        | 39.06                |
-|                 | FLoRIST-O      | **20.68** (τ=0.95) | 37.59          | _30.29_ (τ=0.99) | 18.10          | **28.29** (τ=0.95) | 38.80           |
-|                 | FLoRIST-E      | _19.95_ (τ=0.82) | **64.93**       | 29.66 (τ=0.80) | **94.30**           | 27.18 (τ=0.82) | **87.70**            |
+---
 
-_Bold = Highest, Italic = Second-Highest_
+## Results Summary
 
-See the full table in the [paper] for all datasets and baseline comparisons.
+Across all experiments:
+
+FLoRIST achieves:
+
+* Best or second-best accuracy
+* Highest communication efficiency
+* Stable heterogeneous performance
+* Lowest server compute among accurate methods
+
+Key findings:
+
+* Up to **349× less communication vs full fine-tuning**
+* Up to **108× more efficient than FLoRA**
+* ~7× lower server FLOPs vs FlexLoRA
+* Adaptive rank compression per layer
+* Intermediate layers require higher rank
+* q_proj > v_proj intrinsic dimensionality
+
+---
+
+## Communication Cost
+
+Example (TinyLlama, Wizard):
+
+| Method      | Download (MB) |
+| ----------- | ------------- |
+| Full FT     | 2076          |
+| FedIT       | 45            |
+| FLoRA       | 45            |
+| FFA         | 22            |
+| **FLoRIST** | **8.4**       |
+
+---
 
 ## License
 
-This repository is released under the Apache License 2.0. See `LICENSE` for details.
+Apache 2.0
+
+---
 
 ## Contributing
 
-We welcome pull requests for reproducibility enhancements, dataset loaders, and benchmarking scripts. For major changes, please open an issue first to discuss what you would like to change.
+We welcome:
+
+* reproducibility scripts
+* dataset loaders
+* experiment tracking
+* benchmark extensions
+
+Open an issue before major changes.
+
+
