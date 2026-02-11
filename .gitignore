@@ -1,0 +1,25 @@
+# OS / Python
+.DS_Store
+__pycache__/
+*.pyc
+
+# Local envs
+.venv/
+venv/
+florist/
+
+# Runtime logs/artifacts
+*.log
+
+# Training outputs/checkpoints
+fedgpt-llama7b-5-2/
+*/log.txt
+
+# Local datasets (do not commit large data)
+data/
+data_alpaca/
+data_wiz/
+
+# Editor
+.vscode/
+.idea/
