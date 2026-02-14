@@ -17,7 +17,6 @@ fedgpt-llama7b-5-2/
 
 # Local datasets (do not commit large data)
 data/
-data_alpaca/
 data_wiz/
 
 # Editor
