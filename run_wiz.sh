@@ -26,8 +26,7 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # python3 main.py --global_model 'huggyllama/llama-7b' --data_path  "./data" --output_dir './llama7b-dolly-heter-75-1-100-fedit/' --num_communication_rounds 75 --local_num_epochs 1 --method fedit --num_clients 100 --local_micro_batch_size 4  --local_batch_size 64 --heter True --zero_padding True
 
 
-python3 main.py --global_model 'meta-llama/Llama-3.2-1B' --data_path  "./data_alpaca" --output_dir './Llama-3.2-1B-alpaca-homo-75-1-100-fedit/' --num_communication_rounds 75 --local_num_epochs 1 --method fedit --num_clients 100
+python -m torch.distributed.launch --nproc_per_node=1 --master_port=$((RANDOM%10000+20000)) --use_env main.py --global_model 'meta-llama/Llama-3.2-1B' --data_path  "./data" --output_dir './Llama-3.2-1B-dolly-homo-75-1-100-florist/' --num_communication_rounds 75 --local_num_epochs 1 --method florist --num_clients 100
 
-# python3 main.py --global_model 'meta-llama/Llama-3.2-1B' --data_path  "./data_alpaca" --output_dir './Llama-3.2-1B-alpaca-homo-75-1-100-flex/' --num_communication_rounds 75 --local_num_epochs 1 --method flex --num_clients 100
+python -m torch.distributed.launch --nproc_per_node=1 --master_port=$((RANDOM%10000+20000)) --use_env main.py --global_model 'meta-llama/Llama-3.2-1B' --data_path  "./data" --output_dir './Llama-3.2-1B-dolly-homo-75-1-100-flora/' --num_communication_rounds 75 --local_num_epochs 1 --method flora --num_clients 100
 
-# python3 main.py --global_model 'meta-llama/Llama-3.2-1B' --data_path  "./data_alpaca" --output_dir './Llama-3.2-1B-alpaca-homo-75-1-100-florist/' --num_communication_rounds 75 --local_num_epochs 1 --method florist --num_clients 100

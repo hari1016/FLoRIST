@@ -16,19 +16,29 @@ import time
 # Override the built-in print() function
 print = functools.partial(print, flush=True)
 
+def _safe_load_state_dict(path, map_location=None):
+    try:
+        return torch.load(path, map_location=map_location, weights_only=True)
+    except TypeError:
+        return torch.load(path, map_location=map_location)
+
 def FedAvg(model, selected_clients_set, output_dir, local_dataset_len_dict, epoch, flora, florist, flex, ffa, threshold, lora_r, heter, local_ranks, zero_padding, full):
     weights_array = normalize(
         torch.tensor([local_dataset_len_dict[client_id] for client_id in selected_clients_set],
                      dtype=torch.float32),
         p=1, dim=0)
     print("Weights:", weights_array)
+    try:
+        target_device = next(model.parameters()).device
+    except StopIteration:
+        target_device = torch.device("cpu")
 
     if florist:
         aggregated_BA = {}
         for k, client_id in enumerate(selected_clients_set):
             single_output_dir = os.path.join(output_dir, str(epoch), "local_output_{}".format(client_id), "pytorch_model.bin")
-            # single_weights = torch.load(single_output_dir)
-            single_weights = torch.load(single_output_dir, map_location = 'cpu')
+            single_weights = _safe_load_state_dict(single_output_dir, map_location=target_device)
+            client_weight = float(weights_array[k])
             x = 0
             if k == 0:
                 weighted_single_weights = single_weights
@@ -38,21 +48,21 @@ def FedAvg(model, selected_clients_set, output_dir, local_dataset_len_dict, epoc
                     if heter:
                         x += 1
                         if weighted_single_weights[key].shape[0] == local_ranks[k]:
-                            weighted_single_weights[key] = weighted_single_weights[key] * (weights_array[k] * 1)
+                            weighted_single_weights[key] = weighted_single_weights[key] * client_weight
                     else:
                         if weighted_single_weights[key].shape[0] == lora_r:
-                            weighted_single_weights[key] = weighted_single_weights[key] * (weights_array[k] * 1)
+                            weighted_single_weights[key] = weighted_single_weights[key] * client_weight
 
             else:
                 for key in single_weights.keys():
                     if heter:
                         x += 1
                         if single_weights[key].shape[0] == local_ranks[k]:
-                            new = [weighted_single_weights[key], single_weights[key] * (weights_array[k]) * 1]
+                            new = [weighted_single_weights[key], single_weights[key] * client_weight]
                             weighted_single_weights[key] = torch.cat(new, dim=0)
                     else:
                         if single_weights[key].shape[0] == lora_r:
-                            new = [weighted_single_weights[key], single_weights[key] * (weights_array[k]) * 1]
+                            new = [weighted_single_weights[key], single_weights[key] * client_weight]
                             weighted_single_weights[key] = torch.cat(new, dim=0)
 
                     if heter:
@@ -108,8 +118,7 @@ def FedAvg(model, selected_clients_set, output_dir, local_dataset_len_dict, epoc
         aggregated_BA = {}
         for k, client_id in enumerate(selected_clients_set):
             single_output_dir = os.path.join(output_dir, str(epoch), "local_output_{}".format(client_id), "pytorch_model.bin")
-            # single_weights = torch.load(single_output_dir, map_location = 'cpu')
-            single_weights = torch.load(single_output_dir, map_location='cpu')
+            single_weights = _safe_load_state_dict(single_output_dir, map_location='cpu')
             start_time = time.time()
             for key in single_weights.keys():
                 if ".lora_A.weight" in key:
@@ -147,8 +156,7 @@ def FedAvg(model, selected_clients_set, output_dir, local_dataset_len_dict, epoc
             start_time = time.time()
             for k, client_id in enumerate(selected_clients_set):
                 single_output_dir = os.path.join(output_dir, str(epoch), "local_output_{}".format(client_id), "pytorch_model.bin")
-                # single_weights = torch.load(single_output_dir, map_location = 'cpu')
-                single_weights = torch.load(single_output_dir, map_location='cpu')
+                single_weights = _safe_load_state_dict(single_output_dir, map_location='cpu')
                 client_rank = single_weights[key].shape[0]
                 # Truncate to the client's rank
                 U_k = U[:, :client_rank]
@@ -188,7 +196,7 @@ def FedAvg(model, selected_clients_set, output_dir, local_dataset_len_dict, epoc
         for k, client_id in enumerate(selected_clients_set):
             single_output_dir = os.path.join(output_dir, str(epoch), "local_output_{}".format(client_id),
                                              "pytorch_model.bin")
-            single_weights = torch.load(single_output_dir, map_location = 'cpu')
+            single_weights = _safe_load_state_dict(single_output_dir, map_location='cpu')
             #print(single_weights)
             #print("y")
 
