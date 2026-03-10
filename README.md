@@ -65,6 +65,26 @@ Tested with PyTorch 2.x, CUDA 12, and NVIDIA H100/A100 GPUs.
 
 ---
 
+## Model Setup
+
+### TinyLlama
+Download the TinyLlama-1.1B model before running experiments:
+```bash
+mkdir -p tinyllama
+cd tinyllama
+wget -O tinyllama/model.safetensors \
+    "https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0/resolve/main/model.safetensors"
+```
+
+### LLaMA-3.2-1B
+No local download needed. Set your HuggingFace token as an environment variable before running:
+```bash
+export HF_TOKEN=your_token_here
+```
+
+You can generate a token at https://huggingface.co/settings/tokens. You must also accept Meta's 
+license at https://huggingface.co/meta-llama/Llama-3.2-1B before your token will grant access.
+
 ## Datasets
 
 We follow the data format used in prior federated LoRA work. Each sample contains:
