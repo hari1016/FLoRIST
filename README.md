@@ -59,7 +59,7 @@ Client ranks follow a heavy-tail distribution reflecting realistic device imbala
 
 ```bash
 pip install -r requirements.txt
-````
+```
 
 Tested with PyTorch 2.x, CUDA 12, and NVIDIA H100/A100 GPUs.
 
@@ -68,16 +68,20 @@ Tested with PyTorch 2.x, CUDA 12, and NVIDIA H100/A100 GPUs.
 ## Model Setup
 
 ### TinyLlama
-Download the TinyLlama-1.1B model before running experiments:
+
+Download the TinyLlama-1.1B model before running experiments. Two steps are required: `download.py` fetches the tokenizer, configuration, and metadata via HuggingFace `snapshot_download`, and then `wget` fetches the model weights separately:
+
 ```bash
-mkdir -p tinyllama
+python download.py
 cd tinyllama
 wget -O tinyllama/model.safetensors \
     "https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0/resolve/main/model.safetensors"
 ```
 
 ### LLaMA-3.2-1B
+
 No local download needed. Set your HuggingFace token as an environment variable before running:
+
 ```bash
 export HF_TOKEN=your_token_here
 ```
@@ -85,9 +89,19 @@ export HF_TOKEN=your_token_here
 You can generate a token at https://huggingface.co/settings/tokens. You must also accept Meta's 
 license at https://huggingface.co/meta-llama/Llama-3.2-1B before your token will grant access.
 
+---
+
 ## Datasets
 
-We follow the data format used in prior federated LoRA work. Each sample contains:
+All three datasets are included pre-split in the repository. No manual download is required.
+
+| Dataset | Directory | Source |
+|---------|-----------|--------|
+| Dolly-15k | `./data/` | [HuggingFace](https://huggingface.co/datasets/databricks/databricks-dolly-15k) |
+| Alpaca-52k | `./data_alpaca/` | [HuggingFace](https://huggingface.co/datasets/tatsu-lab/alpaca) |
+| WizardLM-70k | `./data_wiz/` | [HuggingFace](https://huggingface.co/datasets/WizardLM/WizardLM_evol_instruct_70k) |
+
+Each sample contains:
 
 ```
 instruction
@@ -95,16 +109,58 @@ input (optional)
 output
 ```
 
-Datasets are downloaded and placed in:
+---
 
-Wizard → `./data_wiz/`
-[https://huggingface.co/datasets/WizardLM/WizardLM_evol_instruct_70k](https://huggingface.co/datasets/WizardLM/WizardLM_evol_instruct_70k)
+## Quick Start: Functional Validation (10 rounds)
 
-Alpaca → `./data_alpaca/`
-[https://huggingface.co/datasets/tatsu-lab/alpaca](https://huggingface.co/datasets/tatsu-lab/alpaca)
+To verify that the environment is correctly set up and the full pipeline runs end-to-end, use this short validation run. It completes in approximately 1–2 hours on a single GPU with 40 GB+ VRAM:
 
-Dolly → `./data/`
-[https://huggingface.co/datasets/databricks/databricks-dolly-15k](https://huggingface.co/datasets/databricks/databricks-dolly-15k)
+```bash
+export HF_TOKEN=your_token_here
+
+python main.py \
+  --global_model llama3.2-1b \
+  --data_path ./data_alpaca \
+  --num_clients 100 \
+  --clients_per_round 10 \
+  --num_communication_rounds 10 \
+  --local_num_epochs 3 \
+  --method florist \
+  --threshold 0.90 \
+  --heter True
+```
+
+This is not intended to reproduce a paper result. Confirm that: (1) the model loads, (2) training proceeds for 10 rounds with per-round logs printed to stdout, and (3) MMLU accuracy is evaluated and reported.
+
+---
+
+## Reproducing a Key Result
+
+We recommend the following configuration as the primary reproduction target. It runs FLoRIST with LLaMA-3.2-1B on Alpaca in the heterogeneous setting for the full 75 rounds (~4 hours on an H200 GPU):
+
+```bash
+export HF_TOKEN=your_token_here
+
+python main.py \
+  --global_model llama3.2-1b \
+  --data_path ./data_alpaca \
+  --num_clients 100 \
+  --clients_per_round 10 \
+  --num_communication_rounds 75 \
+  --local_num_epochs 3 \
+  --method florist \
+  --threshold 0.90 \
+  --heter True
+```
+
+**Expected output:**
+
+- **MMLU accuracy** at round 75: ~0.3136 (31.36%), consistent with the 30.24% reported in Table 2 (within expected variation due to non-deterministic GPU operations and stochastic client sampling).
+- **Total rank across all rounds**: 15,972. Communication efficiency = 1 / (15972 / 76) = 47.58 × 10⁻⁴, consistent with the 48.24 × 10⁻⁴ reported in the paper. (The divisor is 76 because the final round is evaluated twice in the logging.)
+
+A reference output log is provided at `logs/llama3.2-1b_alpaca_heter_florist_tau0.9.log` for comparison.
+
+To further verify FLoRIST's claims, run other methods in the same configuration (e.g., `--method fedit`, `--method ffa`) and confirm that FLoRIST achieves the highest accuracy and communication efficiency.
 
 ---
 
@@ -163,9 +219,9 @@ ffa
 
 ## Threshold Selection
 
-The SVT threshold τ ∈ [0.80, 0.99] controls the retained rank of the global adapter. Lower thresholds produce stronger compression and higher communication efficiency, while higher thresholds prioritize maximal accuracy.
+The SVT threshold τ ∈ [0.80, 0.99] controls the retained rank of the global adapter. Lower thresholds produce stronger compression and higher communication efficiency, while higher thresholds prioritize maximal accuracy. We recommend τ = 0.9 as a robust default that works well across all 12 model–dataset–setting combinations.
 
-In experiments, τ is selected via binary search to match or exceed baseline performance. Thresholding acts as an implicit regularizer that filters noisy client-specific components and preserves shared structure.
+In the paper, τ is also selected via binary search to match or exceed baseline performance. The fixed threshold at τ = 0.9 is within 1% accuracy of the optimally tuned variant in all combinations.
 
 ---
 
@@ -178,7 +234,10 @@ Each training run logs the following statistics:
 - total LoRA rank
 - total transmitted parameters
 
-Communication efficiency is defined as the inverse of total rank. Lower effective rank corresponds to higher efficiency.
+Derived metrics reported in the paper must be computed from the logged values:
+
+- **Communication efficiency** = 1 / (total_rank / 2), where the division by 2 accounts for the two adapter matrices (B_g and A_g). Scale to × 10⁻⁴ to match Table 2.
+- **Communication cost (MB)** = total_parameters × 2 / (1024 × 1024), where the factor of 2 converts FP16 values to bytes.
 
 ---
 
@@ -220,4 +279,3 @@ Apache 2.0
 ## Contributing
 
 We welcome reproducibility improvements, dataset integrations, and benchmarking extensions. Please open an issue before large architectural changes.
-
