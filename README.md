@@ -122,7 +122,7 @@ python main.py \
   --global_model llama3.2-1b \
   --data_path ./data_alpaca \
   --num_clients 100 \
-  --clients_per_round 10 \
+  --client_selection_frac 0.1 \
   --num_communication_rounds 10 \
   --local_num_epochs 3 \
   --method florist \
@@ -145,7 +145,7 @@ python main.py \
   --global_model llama3.2-1b \
   --data_path ./data_alpaca \
   --num_clients 100 \
-  --clients_per_round 10 \
+  --client_selection_frac 0.1 \
   --num_communication_rounds 75 \
   --local_num_epochs 3 \
   --method florist \
@@ -173,7 +173,7 @@ python main.py \
   --global_model tinyllama \
   --data_path ./data \
   --num_clients 100 \
-  --clients_per_round 10 \
+  --client_selection_frac 0.1 \
   --num_communication_rounds 75 \
   --local_num_epochs 3 \
   --method florist \
@@ -187,7 +187,7 @@ python main.py \
   --global_model tinyllama \
   --data_path ./data_wiz \
   --num_clients 100 \
-  --clients_per_round 10 \
+  --client_selection_frac 0.1 \
   --num_communication_rounds 75 \
   --local_num_epochs 3 \
   --method florist \
